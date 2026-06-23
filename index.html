@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Error Correction Exercise Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="workspace" aria-label="誤り修正課題生成器">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Prototype</p>
+            <h1>誤り修正課題ジェネレータ</h1>
+          </div>
+          <div class="score" id="score" aria-live="polite">未採点</div>
+        </header>
+
+        <section class="generator" aria-label="問題生成">
+          <label class="source-field">
+            <span>正しいCプログラム</span>
+            <textarea id="correctSource" spellcheck="false"></textarea>
+          </label>
+
+          <label class="tests-field">
+            <span>テスト入力</span>
+            <textarea id="testsInput" spellcheck="false"></textarea>
+          </label>
+
+          <div class="rule-options">
+            <label>
+              <span>最大誤り数</span>
+              <input id="maxRules" type="number" min="1" max="12" value="4" />
+            </label>
+            <label>
+              <span>シード</span>
+              <input id="variantSeed" type="text" placeholder="空ならランダム" />
+            </label>
+            <button id="generateButton" type="button">問題生成</button>
+          </div>
+        </section>
+
+        <div class="problem">
+          <pre class="code" id="exercise" aria-label="編集可能なCプログラム"></pre>
+        </div>
+
+        <footer class="answerbar" aria-label="採点操作">
+          <div class="actions">
+            <button id="checkButton" type="button">解答</button>
+            <button id="resetButton" type="button" class="secondary">リセット</button>
+          </div>
+
+          <div id="result" class="result" aria-live="polite">
+            黄色の箇所をクリックして編集できます。
+          </div>
+        </footer>
+      </section>
+    </main>
+
+    <template id="editableTemplate">
+      <span class="editable" tabindex="0" role="textbox" spellcheck="false"></span>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>

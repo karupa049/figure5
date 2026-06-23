@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    "IPSJ-TCE0301009 の図7に示された誤り混入ルール例を、このプロトタイプで扱える正規表現ルールへ落としたもの。",
+    "paperRule は論文上のルール種別、operation は本実装での埋め込み方法を表す。"
+  ],
+  "rules": [
+    {
+      "id": "fig7a-relational-operator-drop-equals",
+      "enabled": true,
+      "paperRule": "置換の誤り混入ルール例",
+      "title": "演算子の誤り",
+      "description": "`<=` または `>=` の等号を落として境界条件を誤らせる。",
+      "operation": "replace-capture",
+      "pattern": "(<=|>=)",
+      "group": 1,
+      "variants": [
+        { "from": "<=", "to": "<" },
+        { "from": ">=", "to": ">" }
+      ]
+    },
+    {
+      "id": "semantic-for-upper-bound-minus-one",
+      "enabled": true,
+      "paperRule": "構造を保つ置換の誤り混入ルール",
+      "title": "for文の終了条件を1つ手前にする誤り",
+      "description": "`i < size` のような終了条件を `i < size - 1` にして、最後の要素を処理しないようにする。",
+      "operation": "replace-capture",
+      "pattern": "(for\\s*\\([^;]+;[^;]*<\\s*)([A-Za-z_][A-Za-z0-9_]*)(\\s*;)",
+      "group": 0,
+      "replacement": "$1$2 - 1$3"
+    },
+    {
+      "id": "fig7c-scanf-missing-address",
+      "enabled": true,
+      "paperRule": "削除の誤り混入ルール例",
+      "title": "scanf関数の実引数の&忘れ",
+      "description": "`scanf` の変数実引数から `&` を削除する。",
+      "operation": "delete-capture",
+      "pattern": "scanf\\s*\\(\\s*\"[^\"]*\"\\s*,\\s*(&)(?=[A-Za-z_])",
+      "group": 1,
+      "replacement": ""
+    },
+    {
+      "id": "fig7b-recursive-call-off-by-one",
+      "enabled": true,
+      "paperRule": "別解のある置換の誤り混入ルール例",
+      "title": "関数の再帰呼出しの誤り",
+      "description": "`return ... f(s - 1)` のような再帰呼出しを `s + 1` に変える。",
+      "operation": "replace-capture",
+      "pattern": "\\breturn[^;\\n]*\\([^;\\n()]*(-)\\s*1\\s*\\)",
+      "group": 1,
+      "replacement": "+"
+    },
+    {
+      "id": "fig7d-struct-member-unnecessary-reference",
+      "enabled": true,
+      "paperRule": "挿入の誤り混入ルール例",
+      "title": "構造体の不要なメンバ参照",
+      "description": "`swap(a, b)` のような呼び出しに `.height` を挿入する。",
+      "operation": "replace-capture",
+      "pattern": "\\bswap\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*,\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)",
+      "group": 0,
+      "replacement": "swap($1.height, $2.height)"
+    },
+    {
+      "id": "fig7e-for-initializer-move",
+      "enabled": true,
+      "paperRule": "移動の誤り混入ルール例",
+      "title": "for文直前の初期化文の移動",
+      "description": "`for` 文直前の単純な初期化文を、for本体の先頭へ移動する。",
+      "operation": "replace-capture",
+      "pattern": "((?:^|\\n)([ \\t]*)([A-Za-z_][A-Za-z0-9_]*\\s*=\\s*[^;\\n]+;)[ \\t]*\\n)(\\2for\\s*\\([^\\n]+\\)\\s*\\{)",
+      "flags": "m",
+      "group": 0,
+      "replacement": "\n$4\n$2  $3"
+    },
+    {
+      "id": "local-scanf-function-name-typo",
+      "enabled": true,
+      "paperRule": "図5プロトタイプ補助ルール",
+      "title": "入力関数名の誤り",
+      "description": "`scanf` を存在しない `scan` に置換する。",
+      "operation": "replace-capture",
+      "pattern": "\\bscanf\\b",
+      "group": 0,
+      "replacement": "scan"
+    },
+    {
+      "id": "local-printf-comma-delete",
+      "enabled": true,
+      "paperRule": "図5プロトタイプ補助ルール",
+      "title": "printf実引数の区切り忘れ",
+      "description": "`printf` の書式文字列直後のカンマを削除する。",
+      "operation": "delete-capture",
+      "pattern": "printf\\s*\\(\\s*\"[^\"]*%[^\"]*\"\\s*(,)\\s*[A-Za-z_]",
+      "group": 1,
+      "replacement": ""
+    }
+  ]
+}
