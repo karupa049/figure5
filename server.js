@@ -500,9 +500,14 @@ async function findSemanticMutations(source, expectedTests, options = {}) {
         continue;
       }
 
+      const worksAlone = await producesSemanticFailure(source, expectedTests, [candidate]);
+      if (!worksAlone) {
+        continue;
+      }
+
       const trial = [...mutations, candidate];
-      const works = await producesSemanticFailure(source, expectedTests, trial);
-      if (!works) {
+      const worksTogether = await producesSemanticFailure(source, expectedTests, trial);
+      if (!worksTogether) {
         continue;
       }
 
