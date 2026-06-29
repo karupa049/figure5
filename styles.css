@@ -78,6 +78,45 @@ h2 {
   background: #f9fbfd;
 }
 
+.guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #f7fbff;
+}
+
+.guide-label {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.guide-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.guide-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.guide-highlight {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid #ffb020;
+  outline-offset: 4px;
+  box-shadow: 0 0 0 8px rgba(255, 176, 32, 0.18);
+  transition: outline-color 160ms ease, box-shadow 160ms ease;
+}
+
 .generator {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.55fr) minmax(160px, 0.25fr);
@@ -207,6 +246,11 @@ button.secondary {
   color: var(--ink);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .result {
   min-height: 42px;
   padding: 12px;
@@ -286,6 +330,7 @@ button.secondary {
   }
 
   .topbar,
+  .guide,
   .generator,
   .answerbar {
     display: block;
@@ -301,6 +346,7 @@ button.secondary {
   }
 
   .tests-field,
+  .guide-actions,
   .rule-options {
     margin-top: 12px;
   }

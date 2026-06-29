@@ -309,21 +309,6 @@ function loadRules() {
   return (config.rules || []).filter((rule) => rule.enabled !== false);
 }
 
-function seededRandom(seedText) {
-  let seed = 2166136261;
-  for (let index = 0; index < seedText.length; index++) {
-    seed ^= seedText.charCodeAt(index);
-    seed = Math.imul(seed, 16777619);
-  }
-  return () => {
-    seed += 0x6d2b79f5;
-    let value = seed;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function shuffle(items, random) {
   const copy = [...items];
   for (let index = copy.length - 1; index > 0; index--) {
@@ -486,8 +471,7 @@ async function producesSemanticFailure(source, expectedTests, mutations) {
 
 async function findSemanticMutations(source, expectedTests, options = {}) {
   const maxRules = Math.max(1, Math.min(Number(options.maxRules || 4), 12));
-  const seed = String(options.seed || `${Date.now()}-${Math.random()}`);
-  const random = seededRandom(seed);
+  const random = Math.random;
   const rules = shuffle(loadRules(), random);
   const mutations = [];
   const occupied = [];

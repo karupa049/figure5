@@ -17,42 +17,49 @@
           <div class="score" id="score" aria-live="polite">未採点</div>
         </header>
 
+        <section class="guide" aria-label="操作ガイド">
+          <div>
+            <p class="guide-label">操作ガイド</p>
+            <p id="guideText" class="guide-text">正しく動くCプログラムを貼り付けます。</p>
+          </div>
+          <div class="guide-actions">
+            <button id="guidePrev" type="button" class="secondary">戻る</button>
+            <button id="guideNext" type="button">次へ</button>
+          </div>
+        </section>
+
         <section class="generator" aria-label="問題生成">
-          <label class="source-field">
+          <label class="source-field" data-guide-target="source">
             <span>正しいCプログラム</span>
             <textarea id="correctSource" spellcheck="false"></textarea>
           </label>
 
-          <label class="tests-field">
+          <label class="tests-field" data-guide-target="tests">
             <span>テスト入力</span>
             <textarea id="testsInput" spellcheck="false"></textarea>
           </label>
 
-          <div class="rule-options">
+          <div class="rule-options" data-guide-target="options">
             <label>
               <span>最大誤り数</span>
               <input id="maxRules" type="number" min="1" max="12" value="4" />
             </label>
-            <label>
-              <span>シード</span>
-              <input id="variantSeed" type="text" placeholder="空ならランダム" />
-            </label>
-            <button id="generateButton" type="button">問題生成</button>
+            <button id="generateButton" type="button" data-guide-target="generate">問題生成</button>
           </div>
         </section>
 
-        <div class="problem">
+        <div class="problem" data-guide-target="exercise">
           <pre class="code" id="exercise" aria-label="編集可能なCプログラム"></pre>
         </div>
 
         <footer class="answerbar" aria-label="採点操作">
           <div class="actions">
-            <button id="checkButton" type="button">解答</button>
+            <button id="checkButton" type="button" data-guide-target="check">解答</button>
             <button id="resetButton" type="button" class="secondary">リセット</button>
           </div>
 
           <div id="result" class="result" aria-live="polite">
-            黄色の箇所をクリックして編集できます。
+            色付きのブロックをクリックして編集できます。
           </div>
         </footer>
       </section>

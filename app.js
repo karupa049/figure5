@@ -2,11 +2,40 @@ const correctSourceInput = document.querySelector("#correctSource");
 const testsInput = document.querySelector("#testsInput");
 const generateButton = document.querySelector("#generateButton");
 const maxRulesInput = document.querySelector("#maxRules");
-const variantSeedInput = document.querySelector("#variantSeed");
 const exercise = document.querySelector("#exercise");
 const result = document.querySelector("#result");
 const score = document.querySelector("#score");
 const editableTemplate = document.querySelector("#editableTemplate");
+const guideText = document.querySelector("#guideText");
+const guidePrev = document.querySelector("#guidePrev");
+const guideNext = document.querySelector("#guideNext");
+
+const guideSteps = [
+  {
+    target: "source",
+    text: "正しく動くCプログラムを貼り付けます。すでに誤りが入ったコードではなく、正解コードを入れてください。",
+  },
+  {
+    target: "tests",
+    text: "標準入力として渡す入力例を書きます。複数ケースは --- だけの行で区切ります。",
+  },
+  {
+    target: "options",
+    text: "最大誤り数を決めます。指定数は上限なので、条件に合う候補が少ない場合は少なめに生成されます。",
+  },
+  {
+    target: "generate",
+    text: "問題生成を押すと、正解コードの期待出力を作り、出力が変わる誤りだけを埋め込みます。",
+  },
+  {
+    target: "exercise",
+    text: "生成された問題です。色付きのブロックをクリックして、必要だと思う箇所を正しいコードに修正します。編集しないブロックがあってもかまいません。",
+  },
+  {
+    target: "check",
+    text: "修正できたと思ったら解答を押します。各テストの入力、期待出力、実際の出力が表示されます。",
+  },
+];
 
 const defaultCorrectSource = `/* ************************************
 次の
@@ -56,7 +85,37 @@ const defaultTests = `1 2 3 4
 
 let exerciseParts = [];
 let activeTests = [];
+let guideIndex = 0;
 const editableById = new Map();
+
+function guideTarget(step) {
+  return document.querySelector(`[data-guide-target="${step.target}"]`);
+}
+
+function setGuideStep(index) {
+  guideIndex = Math.max(0, Math.min(index, guideSteps.length - 1));
+  document.querySelectorAll(".guide-highlight").forEach((node) => {
+    node.classList.remove("guide-highlight");
+  });
+
+  const step = guideSteps[guideIndex];
+  const target = guideTarget(step);
+  guideText.textContent = step.text;
+  guidePrev.disabled = guideIndex === 0;
+  guideNext.textContent = guideIndex === guideSteps.length - 1 ? "最初へ" : "次へ";
+
+  if (target) {
+    target.classList.add("guide-highlight");
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function advanceGuideTo(targetName) {
+  const index = guideSteps.findIndex((step) => step.target === targetName);
+  if (index >= 0 && index > guideIndex) {
+    setGuideStep(index);
+  }
+}
 
 function parseTests(text) {
   return text
@@ -69,7 +128,7 @@ function parseTests(text) {
     }));
 }
 
-function resetStatus(message = "黄色の箇所をクリックして編集できます。") {
+function resetStatus(message = "色付きのブロックをクリックして編集できます。") {
   for (const editable of editableById.values()) {
     editable.classList.remove("checked");
   }
@@ -164,7 +223,10 @@ function renderCheckResult(payload) {
   result.append(list);
 }
 
-async function generateExercise() {
+async function generateExercise(options = {}) {
+  if (!options.silentGuide) {
+    advanceGuideTo("generate");
+  }
   score.textContent = "生成中";
   result.className = "result";
   result.textContent = "正しいプログラムを実行して期待出力を作り、誤りを埋め込んでいます。";
@@ -178,7 +240,6 @@ async function generateExercise() {
         tests: parseTests(testsInput.value),
         options: {
           maxRules: Number(maxRulesInput.value || 4),
-          seed: variantSeedInput.value.trim() || undefined,
         },
       }),
     });
@@ -194,6 +255,9 @@ async function generateExercise() {
     renderExercise(payload.parts);
     const ruleNames = payload.slots.map((slot) => slot.ruleTitle).join("、");
     resetStatus(`${payload.slots.length}個の編集可能箇所を持つ問題を生成しました。適用ルール: ${ruleNames}`);
+    if (!options.silentGuide) {
+      setGuideStep(4);
+    }
   } catch (error) {
     score.textContent = "生成失敗";
     result.className = "result bad";
@@ -202,6 +266,7 @@ async function generateExercise() {
 }
 
 async function checkAnswers() {
+  advanceGuideTo("check");
   if (!exerciseParts.length) {
     result.className = "result bad";
     result.textContent = "先に問題を生成してください。";
@@ -244,7 +309,19 @@ function resetExercise() {
 
 correctSourceInput.value = defaultCorrectSource;
 testsInput.value = defaultTests;
+correctSourceInput.addEventListener("focus", () => setGuideStep(0));
+testsInput.addEventListener("focus", () => setGuideStep(1));
+maxRulesInput.addEventListener("focus", () => setGuideStep(2));
 generateButton.addEventListener("click", generateExercise);
 document.querySelector("#checkButton").addEventListener("click", checkAnswers);
 document.querySelector("#resetButton").addEventListener("click", resetExercise);
-generateExercise();
+guidePrev.addEventListener("click", () => setGuideStep(guideIndex - 1));
+guideNext.addEventListener("click", () => {
+  if (guideIndex === guideSteps.length - 1) {
+    setGuideStep(0);
+  } else {
+    setGuideStep(guideIndex + 1);
+  }
+});
+setGuideStep(0);
+generateExercise({ silentGuide: true });
