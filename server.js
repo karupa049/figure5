@@ -141,6 +141,7 @@ function isLoopControlledScanf(source, index) {
 
 function requiredFixedInputCount(source) {
   const scanfPattern = /scanf\s*\(\s*"((?:\\.|[^"\\])*)"/g;
+  const cinPattern = /\b(?:std::)?cin\s*(>>\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\[[^\]]+\])?\s*)+/g;
   let required = 0;
   let match;
 
@@ -149,6 +150,13 @@ function requiredFixedInputCount(source) {
       continue;
     }
     required += countConversions(match[1]);
+  }
+
+  while ((match = cinPattern.exec(source))) {
+    if (isLoopControlledScanf(source, match.index)) {
+      continue;
+    }
+    required += (match[0].match(/>>/g) || []).length;
   }
 
   return required;
@@ -165,7 +173,7 @@ function validateTestInputs(source, tests) {
     if (tokens.length < required) {
       return makeFailure(
         `テスト「${test.name}」の入力が足りません。`,
-        `このプログラムは固定のscanf入力を少なくとも${required}個必要としますが、このケースは${tokens.length}個です。入力: ${JSON.stringify(test.input)}`,
+        `このプログラムは固定の標準入力を少なくとも${required}個必要としますが、このケースは${tokens.length}個です。入力: ${JSON.stringify(test.input)}`,
       );
     }
   }
@@ -173,29 +181,158 @@ function validateTestInputs(source, tests) {
   return { ok: true };
 }
 
+function indentOf(line) {
+  return line.match(/^[ \t]*/)?.[0] || "";
+}
+
+function ensureIostream(source) {
+  if (/#\s*include\s*<iostream>/.test(source)) {
+    return source;
+  }
+  const includePattern = /(^\s*#\s*include\s*<[^>]+>\s*$)/m;
+  if (includePattern.test(source)) {
+    return source.replace(includePattern, `$1\n#include <iostream>`);
+  }
+  return `#include <iostream>\n${source}`;
+}
+
+function insertCppTraceOutput(source) {
+  if (/\[trace\]/.test(source)) {
+    return source;
+  }
+
+  let traced = ensureIostream(source);
+  if (!/\busing\s+namespace\s+std\s*;/.test(traced)) {
+    traced = traced.replace(/(^\s*#\s*include\s*<iostream>\s*$)/m, "$1\nusing namespace std;");
+  }
+
+  traced = traced.replace(
+    /^([ \t]*(?:\w[\w:<>,\s*&]*\s+)?sum\s*=\s*[^;\n]+;\s*)$/gm,
+    (line) => `${line}\n${indentOf(line)}cout << "[trace] sum=" << sum << endl;`,
+  );
+  traced = traced.replace(
+    /^([ \t]*(?:\w[\w:<>,\s*&]*\s+)?size\s*=\s*[^;\n]+;\s*)$/gm,
+    (line) => `${line}\n${indentOf(line)}cout << "[trace] size=" << size << endl;`,
+  );
+  traced = traced.replace(
+    /^([ \t]*(?:\w[\w:<>,\s*&]*\s+)?avr\s*=\s*[^;\n]+;\s*)$/gm,
+    (line) => `${line}\n${indentOf(line)}cout << "[trace] avr=" << avr << endl;`,
+  );
+  traced = traced.replace(
+    /^([ \t]*for\s*\(\s*(?:const\s+)?(?:auto|int|double|float|char|long|short|[A-Za-z_:][A-Za-z0-9_:<>]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[^)]*\)\s*\{\s*)$/gm,
+    (line, _full, itemName) => `${line}\n${indentOf(line)}  cout << "[trace] ${itemName}=" << ${itemName} << " count=" << count << endl;`,
+  );
+  traced = traced.replace(
+    /^([ \t]*(?:count\s*(?:\+\+|--|\+=\s*[^;\n]+|-=\s*[^;\n]+)|count\s*=\s*[^;\n]*\bcount\b[^;\n]*)\s*;\s*)$/gm,
+    (line) => `${line}\n${indentOf(line)}cout << "[trace] count=" << count << endl;`,
+  );
+
+  // 元からある printf の前に [trace] を挿入する
+  traced = traced.replace(
+    /^([ \t]*)((?:std::)?printf\s*\(.*)$/gm,
+    (line, indent, rest) => {
+      if (line.includes("[trace]") || /^[ \t]*\/\//.test(line)) return line;
+      return `${indent}cout << "[trace] "; ${rest}`;
+    }
+  );
+
+  // 元からある cout の前に [trace] を挿入する
+  traced = traced.replace(
+    /^([ \t]*)((?:std::)?cout\s*<<.*)$/gm,
+    (line, indent, rest) => {
+      if (line.includes("[trace]") || /^[ \t]*\/\//.test(line)) return line;
+      return `${indent}cout << "[trace] "; ${rest}`;
+    }
+  );
+
+  return traced;
+}
+
+function traceLineLabels(source) {
+  return source.split("\n").reduce((labels, line, index) => {
+    if (/\bcout\s*<<\s*"\[trace\]/.test(line)) {
+      labels.push(`L${index + 1}`);
+    }
+    return labels;
+  }, []);
+}
+
+function applyTraceLabels(source, labels) {
+  let traceIndex = 0;
+  return source.replace(/"\[trace\]/g, (match) => {
+    const label = labels[traceIndex];
+    traceIndex++;
+    return label ? `"[trace ${label}]` : match;
+  });
+}
+
+async function makeInstrumentedExercise(source, correctSource, rawTests) {
+  if (!looksLikeCpp(source) || !looksLikeCpp(correctSource)) {
+    return makeFailure("coutヒントはC++コード向けです。Cコードの場合はC++版の正解コードで試してください。");
+  }
+
+  const rawInstrumentedSource = insertCppTraceOutput(source);
+  const labels = traceLineLabels(rawInstrumentedSource);
+  const instrumentedSource = applyTraceLabels(rawInstrumentedSource, labels);
+  const instrumentedCorrectSource = applyTraceLabels(insertCppTraceOutput(correctSource), labels);
+  const expected = await makeExpectedTests(instrumentedCorrectSource, rawTests);
+  if (!expected.ok) {
+    return expected;
+  }
+
+  return {
+    ok: true,
+    source: instrumentedSource,
+    tests: expected.tests,
+    message: "cout入りの問題と期待出力を生成しました。",
+  };
+}
+
+function looksLikeCpp(source) {
+  return /#\s*include\s*<(?:iostream|bits\/stdc\+\+\.h|vector|string|algorithm|map|set|queue|stack)>/.test(source)
+    || /\b(?:std::|using\s+namespace\s+std\b|cin\s*>>|cout\s*<<|class\s+\w+|template\s*<)/.test(source);
+}
+
+function compileAttemptsFor(source, tmpDir, exePath) {
+  const cAttempt = {
+    language: "C",
+    sourcePath: path.join(tmpDir, "answer.c"),
+    command: "gcc",
+    args: ["-std=c11", "-Wall", "-Wextra", path.join(tmpDir, "answer.c"), "-o", exePath],
+  };
+  const cppAttempt = {
+    language: "C++",
+    sourcePath: path.join(tmpDir, "answer.cpp"),
+    command: "g++",
+    args: ["-std=c++17", "-Wall", "-Wextra", path.join(tmpDir, "answer.cpp"), "-o", exePath],
+  };
+
+  return looksLikeCpp(source) ? [cppAttempt, cAttempt] : [cAttempt, cppAttempt];
+}
+
 async function compileSource(source, tmpPrefix = "exercise-") {
   if (typeof source !== "string" || source.trim().length === 0) {
-    throw new Error("Cソースが空です。");
+    throw new Error("C/C++ソースが空です。");
   }
 
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), tmpPrefix));
-  const sourcePath = path.join(tmpDir, "answer.c");
   const exePath = path.join(tmpDir, "answer");
+  const failures = [];
 
-  await fs.promises.writeFile(sourcePath, source, "utf8");
-  const compile = await runCommand(
-    "gcc",
-    ["-std=c11", "-Wall", "-Wextra", sourcePath, "-o", exePath],
-    { cwd: tmpDir, timeoutMs: 5000 },
-  );
+  for (const attempt of compileAttemptsFor(source, tmpDir, exePath)) {
+    await fs.promises.writeFile(attempt.sourcePath, source, "utf8");
+    const compile = await runCommand(attempt.command, attempt.args, { cwd: tmpDir, timeoutMs: 5000 });
 
-  if (compile.code !== 0) {
-    await fs.promises.rm(tmpDir, { recursive: true, force: true });
-    const detail = compile.stderr.trim();
-    throw new Error(detail ? `コンパイルに失敗しました。\n${detail}` : "コンパイルに失敗しました。");
+    if (compile.code === 0) {
+      return { tmpDir, exePath, language: attempt.language };
+    }
+
+    const detail = compile.stderr.trim() || compile.stdout.trim() || `${attempt.command} を実行できませんでした。`;
+    failures.push(`${attempt.language} (${attempt.command})\n${detail}`);
   }
 
-  return { tmpDir, exePath };
+  await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  throw new Error(`C/C++どちらのコンパイルにも失敗しました。\n${failures.join("\n\n")}`);
 }
 
 async function runTests(exePath, tmpDir, tests) {
@@ -540,7 +677,7 @@ async function generateExercise(source, tests, options = {}) {
   const mutations = await findSemanticMutations(source, expected.tests, options);
   const injected = makeExerciseParts(source, mutations);
   if (!injected) {
-    return makeFailure("コンパイルは通るが出力が変わる誤りを生成できませんでした。テスト入力を増やすか、for文・比較式・再帰などを含むCコードで試してください。");
+    return makeFailure("コンパイルは通るが出力が変わる誤りを生成できませんでした。テスト入力を増やすか、for文・比較式・再帰などを含むC/C++コードで試してください。");
   }
 
   return {
@@ -550,6 +687,38 @@ async function generateExercise(source, tests, options = {}) {
     tests: expected.tests,
     message: `${injected.slots.length}個の編集可能箇所を生成しました。`,
   };
+}
+
+const LOGS_DIR = path.join(ROOT, "logs");
+const LOG_FILE = path.join(LOGS_DIR, "study-log.jsonl");
+
+async function handleLogRequest(payload) {
+  try {
+    if (!fs.existsSync(LOGS_DIR)) {
+      fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
+    fs.appendFileSync(LOG_FILE, JSON.stringify(payload) + "\n", "utf8");
+  } catch (err) {
+    console.error("Failed to write local log:", err);
+  }
+
+  const gasUrl = process.env.GAS_WEBAPP_URL;
+  if (gasUrl) {
+    try {
+      const response = await fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        console.error(`GAS log forwarding failed with status ${response.status}`);
+      }
+    } catch (err) {
+      console.error("Failed to forward log to GAS:", err);
+    }
+  }
+
+  return { ok: true };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -576,6 +745,35 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 400, {
         ok: false,
         message: `生成リクエストを処理できませんでした: ${error.message}`,
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/instrument") {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      sendJson(res, 200, await makeInstrumentedExercise(payload.source, payload.correctSource, payload.tests));
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: `coutヒント生成リクエストを処理できませんでした: ${error.message}`,
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/log") {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      const resData = await handleLogRequest(payload);
+      sendJson(res, 200, resData);
+    } catch (error) {
+      sendJson(res, 400, {
+        ok: false,
+        message: `ログリクエストを処理できませんでした: ${error.message}`,
       });
     }
     return;
