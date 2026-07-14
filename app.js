@@ -93,34 +93,32 @@ const defaultCorrectSource = `/* ************************************
 の誤りを訂正しなさい．
 ************************************ */
 
-#include <stdio.h>
-#define MAXSIZE 128
+#include <iostream>
+#include <vector>
+using namespace std;
 
-int main(void)
-{
-  int data[MAXSIZE];
-  int size, sum, count, i;
-  double avr;
+int main(){
+  vector<int> data;
+  int input;
+  int sum = 0;
 
-  sum = 0;
-  size = 0;
-  while (scanf("%d", &data[size]) != EOF) {
-    sum += data[size];
-    size++;
+  while(cin >> input){
+    data.push_back(input);
+    sum = sum + input;
   }
+  
+  int size = data.size();
+  double avr = (double)sum / size;
+  cout << avr << endl;
 
-  avr = (double) sum / size;
-  printf("平均: %f\\n", avr);
-  count = 0;
-
-  for (i = 0; i < size; i++) {
-    if (data[i] >= avr) {
+  int count = 0;
+  for(int i : data){
+    if(i >= avr){
       count++;
     }
   }
-  printf("平均以上は%d個\\n", count);
 
-  return 0;
+  cout << count << endl;
 }
 `;
 
