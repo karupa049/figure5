@@ -297,14 +297,26 @@ function compileAttemptsFor(source, tmpDir, exePath) {
   const cAttempt = {
     language: "C",
     sourcePath: path.join(tmpDir, "answer.c"),
-    command: "gcc",
-    args: ["-std=c11", "-Wall", "-Wextra", path.join(tmpDir, "answer.c"), "-o", exePath],
+    command: "docker",
+    args: [
+      "run", "--rm",
+      "-v", `${tmpDir}:/src`,
+      "-w", "/src",
+      "gcc",
+      "gcc", "-std=c11", "-Wall", "-Wextra", "answer.c", "-o", "answer"
+    ],
   };
   const cppAttempt = {
     language: "C++",
     sourcePath: path.join(tmpDir, "answer.cpp"),
-    command: "g++",
-    args: ["-std=c++17", "-Wall", "-Wextra", path.join(tmpDir, "answer.cpp"), "-o", exePath],
+    command: "docker",
+    args: [
+      "run", "--rm",
+      "-v", `${tmpDir}:/src`,
+      "-w", "/src",
+      "gcc",
+      "g++", "-std=c++17", "-Wall", "-Wextra", "answer.cpp", "-o", "answer"
+    ],
   };
 
   return looksLikeCpp(source) ? [cppAttempt, cAttempt] : [cAttempt, cppAttempt];
@@ -315,13 +327,17 @@ async function compileSource(source, tmpPrefix = "exercise-") {
     throw new Error("C/C++ソースが空です。");
   }
 
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), tmpPrefix));
+  const tmpParent = path.join(ROOT, "tmp");
+  if (!fs.existsSync(tmpParent)) {
+    fs.mkdirSync(tmpParent, { recursive: true });
+  }
+  const tmpDir = await fs.promises.mkdtemp(path.join(tmpParent, tmpPrefix));
   const exePath = path.join(tmpDir, "answer");
   const failures = [];
 
   for (const attempt of compileAttemptsFor(source, tmpDir, exePath)) {
     await fs.promises.writeFile(attempt.sourcePath, source, "utf8");
-    const compile = await runCommand(attempt.command, attempt.args, { cwd: tmpDir, timeoutMs: 5000 });
+    const compile = await runCommand(attempt.command, attempt.args, { cwd: tmpDir, timeoutMs: 10000 });
 
     if (compile.code === 0) {
       return { tmpDir, exePath, language: attempt.language };
@@ -338,10 +354,16 @@ async function compileSource(source, tmpPrefix = "exercise-") {
 async function runTests(exePath, tmpDir, tests) {
   const results = [];
   for (const test of tests) {
-    const run = await runCommand(exePath, [], {
+    const run = await runCommand("docker", [
+      "run", "--rm", "-i",
+      "-v", `${tmpDir}:/src`,
+      "-w", "/src",
+      "gcc",
+      "./answer"
+    ], {
       cwd: tmpDir,
       input: test.input,
-      timeoutMs: 2000,
+      timeoutMs: 5000,
     });
 
     if (run.timedOut) {
@@ -722,6 +744,7 @@ async function handleLogRequest(payload) {
 }
 
 const server = http.createServer(async (req, res) => {
+  console.log(`[Request] ${req.method} ${req.url}`);
   if (req.method === "POST" && req.url === "/api/check") {
     try {
       const body = await readBody(req);
