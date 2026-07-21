@@ -23,6 +23,8 @@ if (!studentId) {
 
 let sessionStartTime = null;
 let hintStartTime = null;
+let currentGeneratedPayload = null;
+let storedExercises = [];
 
 async function sendLog(event, extraData = {}) {
   const payload = {
@@ -56,6 +58,12 @@ const codeLineTemplate = document.querySelector("#codeLineTemplate");
 const guideText = document.querySelector("#guideText");
 const guidePrev = document.querySelector("#guidePrev");
 const guideNext = document.querySelector("#guideNext");
+
+const exerciseSelect = document.querySelector("#exerciseSelect");
+const saveExerciseArea = document.querySelector("#saveExerciseArea");
+const exerciseTitleInput = document.querySelector("#exerciseTitleInput");
+const saveExerciseBtn = document.querySelector("#saveExerciseBtn");
+const savedExercisesList = document.querySelector("#savedExercisesList");
 
 const guideSteps = [
   {
@@ -341,6 +349,15 @@ async function generateExercise(options = {}) {
     activeTests = payload.tests;
     renderExercise(payload.parts);
     debugButton.disabled = true;
+    currentGeneratedPayload = {
+      parts: payload.parts,
+      slots: payload.slots,
+      tests: payload.tests,
+      correctSource: correctSourceInput.value
+    };
+    if (saveExerciseArea) {
+      saveExerciseArea.classList.remove("hidden");
+    }
     resetStatus("問題を生成しました。上から順に確認し、OKだと思った行にチェックを入れながら修正してください。");
     sessionStartTime = Date.now();
     hintStartTime = null;
@@ -390,9 +407,20 @@ async function addDebugOutput() {
     activeTests = payload.tests;
     renderExercise([payload.source]);
     debugButton.disabled = true;
-    score.textContent = "未採点";
-    result.className = "result";
-    result.textContent = "cout入りの問題に切り替えました。期待出力もcout込みで更新されています。";
+
+    if (payload.checkResult) {
+      score.textContent = payload.checkResult.ok ? "正解" : "不正解";
+      result.className = `result ${payload.checkResult.ok ? "ok" : "bad"}`;
+      renderCasePanel({
+        ...payload.checkResult,
+        showActual: true,
+      });
+    } else {
+      score.textContent = "未採点";
+      result.className = "result";
+      result.textContent = "cout入りの問題に切り替えました。期待出力もcout込みで更新されています。";
+    }
+
     hintStartTime = Date.now();
     sendLog("hint");
   } catch (error) {
@@ -553,6 +581,171 @@ function resetExercise() {
   resetStatus();
 }
 
+const learnerModeBtn = document.querySelector("#learnerModeBtn");
+const creatorModeBtn = document.querySelector("#creatorModeBtn");
+const creatorPanel = document.querySelector("#creatorPanel");
+
+function setAppMode(mode) {
+  if (mode === "creator") {
+    creatorPanel.classList.remove("hidden");
+    creatorModeBtn.classList.add("active");
+    learnerModeBtn.classList.remove("active");
+    creatorModeBtn.setAttribute("aria-checked", "true");
+    learnerModeBtn.setAttribute("aria-checked", "false");
+  } else {
+    creatorPanel.classList.add("hidden");
+    learnerModeBtn.classList.add("active");
+    creatorModeBtn.classList.remove("active");
+    learnerModeBtn.setAttribute("aria-checked", "true");
+    creatorModeBtn.setAttribute("aria-checked", "false");
+  }
+  localStorage.setItem("appMode", mode);
+}
+
+learnerModeBtn.addEventListener("click", () => setAppMode("learner"));
+creatorModeBtn.addEventListener("click", () => setAppMode("creator"));
+
+const savedMode = localStorage.getItem("appMode") || "learner";
+setAppMode(savedMode);
+
+async function fetchExercises() {
+  try {
+    const res = await fetch("/api/exercises");
+    const data = await res.json();
+    if (data.ok) {
+      storedExercises = data.exercises || [];
+      renderExerciseSelect(storedExercises);
+      renderSavedExercisesList(storedExercises);
+    }
+  } catch (err) {
+    console.error("Failed to fetch exercises:", err);
+  }
+}
+
+function renderExerciseSelect(exercises) {
+  if (!exerciseSelect) return;
+  exerciseSelect.replaceChildren();
+  if (exercises.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "（ストック済みの問題がありません。作成モードで生成・保存してください）";
+    exerciseSelect.appendChild(opt);
+    return;
+  }
+  exercises.forEach((ex, idx) => {
+    const opt = document.createElement("option");
+    opt.value = ex.id;
+    opt.textContent = `${idx + 1}. ${ex.title}`;
+    exerciseSelect.appendChild(opt);
+  });
+}
+
+function renderSavedExercisesList(exercises) {
+  if (!savedExercisesList) return;
+  savedExercisesList.replaceChildren();
+  if (exercises.length === 0) {
+    savedExercisesList.textContent = "保存済みの問題はありません。";
+    return;
+  }
+  exercises.forEach((ex) => {
+    const item = document.createElement("div");
+    item.className = "saved-item";
+
+    const info = document.createElement("div");
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "saved-item-title";
+    titleSpan.textContent = ex.title;
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "saved-item-meta";
+    const dateStr = new Date(ex.createdAt).toLocaleString("ja-JP");
+    metaSpan.textContent = `(${dateStr})`;
+
+    info.appendChild(titleSpan);
+    info.appendChild(metaSpan);
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "saved-item-delete";
+    delBtn.textContent = "削除";
+    delBtn.addEventListener("click", () => deleteExercise(ex.id));
+
+    item.appendChild(info);
+    item.appendChild(delBtn);
+    savedExercisesList.appendChild(item);
+  });
+}
+
+async function saveCurrentExercise() {
+  if (!currentGeneratedPayload) {
+    alert("先に「問題生成」を行ってください。");
+    return;
+  }
+  const title = (exerciseTitleInput.value || "").trim();
+  if (!title) {
+    alert("問題のタイトルを入力してください。");
+    return;
+  }
+  try {
+    const res = await fetch("/api/exercises", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title,
+        parts: currentGeneratedPayload.parts,
+        slots: currentGeneratedPayload.slots,
+        tests: currentGeneratedPayload.tests,
+        correctSource: currentGeneratedPayload.correctSource
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert("問題ストックに保存しました！");
+      exerciseTitleInput.value = "";
+      fetchExercises();
+    } else {
+      alert("保存失敗: " + data.message);
+    }
+  } catch (err) {
+    alert("通信エラーにより保存できませんでした。");
+  }
+}
+
+async function deleteExercise(id) {
+  if (!confirm("この問題をストックから削除してもよろしいですか？")) return;
+  try {
+    const res = await fetch("/api/exercises", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      fetchExercises();
+    }
+  } catch (err) {
+    console.error("Failed to delete exercise:", err);
+  }
+}
+
+function loadSelectedExercise(id) {
+  const ex = storedExercises.find((item) => item.id === id);
+  if (!ex) return;
+  activeTests = ex.tests;
+  renderExercise(ex.parts);
+  debugButton.disabled = true;
+  if (ex.correctSource) {
+    correctSourceInput.value = ex.correctSource;
+  }
+  resetStatus(`「${ex.title}」を読み込みました。上から順に確認し、OKだと思った行にチェックを入れながら修正してください。`);
+  sessionStartTime = Date.now();
+  hintStartTime = null;
+  sendLog("select_exercise", { exerciseId: ex.id, title: ex.title });
+}
+
+saveExerciseBtn.addEventListener("click", saveCurrentExercise);
+exerciseSelect.addEventListener("change", (e) => loadSelectedExercise(e.target.value));
+
 correctSourceInput.value = defaultCorrectSource;
 testsInput.value = defaultTests;
 correctSourceInput.addEventListener("focus", () => setGuideStep(0));
@@ -570,5 +763,8 @@ guideNext.addEventListener("click", () => {
     setGuideStep(guideIndex + 1);
   }
 });
+
 setGuideStep(0);
-generateExercise({ silentGuide: true });
+fetchExercises().then(() => {
+  generateExercise({ silentGuide: true });
+});

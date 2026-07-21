@@ -280,11 +280,14 @@ async function makeInstrumentedExercise(source, correctSource, rawTests) {
     return expected;
   }
 
+  const checkResult = await checkSource(instrumentedSource, expected.tests);
+
   return {
     ok: true,
     source: instrumentedSource,
-    tests: expected.tests,
-    message: "cout入りの問題と期待出力を生成しました。",
+    tests: checkResult.tests || expected.tests,
+    checkResult: checkResult,
+    message: "cout入りの問題と期待出力を生成し、現在のコードの出力も更新しました。",
   };
 }
 
@@ -743,8 +746,92 @@ async function handleLogRequest(payload) {
   return { ok: true };
 }
 
+const DATA_DIR = path.join(ROOT, "data");
+const EXERCISES_FILE = path.join(DATA_DIR, "exercises.json");
+
+function loadExercises() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(EXERCISES_FILE)) {
+      fs.writeFileSync(EXERCISES_FILE, JSON.stringify([], null, 2), "utf8");
+      return [];
+    }
+    const content = fs.readFileSync(EXERCISES_FILE, "utf8");
+    return JSON.parse(content);
+  } catch (err) {
+    console.error("Failed to load exercises:", err);
+    return [];
+  }
+}
+
+function saveExercises(exercises) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(EXERCISES_FILE, JSON.stringify(exercises, null, 2), "utf8");
+    return true;
+  } catch (err) {
+    console.error("Failed to save exercises:", err);
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   console.log(`[Request] ${req.method} ${req.url}`);
+
+  if (req.method === "GET" && req.url === "/api/exercises") {
+    sendJson(res, 200, { ok: true, exercises: loadExercises() });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/exercises") {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      if (!payload.title || !payload.parts || !payload.tests) {
+        sendJson(res, 400, { ok: false, message: "タイトル、パーツ、テストデータが必要です。" });
+        return;
+      }
+      const exercises = loadExercises();
+      const newExercise = {
+        id: "ex-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        title: payload.title.trim(),
+        createdAt: new Date().toISOString(),
+        parts: payload.parts,
+        slots: payload.slots || [],
+        tests: payload.tests,
+        correctSource: payload.correctSource || ""
+      };
+      exercises.push(newExercise);
+      saveExercises(exercises);
+      sendJson(res, 200, { ok: true, exercise: newExercise, exercises });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, message: `問題保存に失敗しました: ${error.message}` });
+    }
+    return;
+  }
+
+  if (req.method === "DELETE" && req.url.startsWith("/api/exercises")) {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body);
+      if (!payload.id) {
+        sendJson(res, 400, { ok: false, message: "削除する問題IDが必要です。" });
+        return;
+      }
+      let exercises = loadExercises();
+      exercises = exercises.filter(ex => ex.id !== payload.id);
+      saveExercises(exercises);
+      sendJson(res, 200, { ok: true, exercises });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, message: `問題削除に失敗しました: ${error.message}` });
+    }
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/api/check") {
     try {
       const body = await readBody(req);

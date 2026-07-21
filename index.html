@@ -14,6 +14,10 @@
             <p class="eyebrow">Prototype</p>
             <h1>誤り修正課題ジェネレータ</h1>
           </div>
+          <div class="mode-switcher" role="radiogroup" aria-label="表示モード切替">
+            <button id="learnerModeBtn" type="button" class="mode-btn active" aria-checked="true">👨‍🎓 学習モード</button>
+            <button id="creatorModeBtn" type="button" class="mode-btn" aria-checked="false">👨‍🏫 問題作成モード</button>
+          </div>
           <div class="score" id="score" aria-live="polite">未採点</div>
         </header>
 
@@ -28,7 +32,14 @@
           </div>
         </section>
 
-        <section class="generator" aria-label="問題生成">
+        <section id="exerciseSelectorArea" class="exercise-selector-bar" aria-label="問題選択">
+          <label for="exerciseSelect" class="selector-label">📚 問題を選択:</label>
+          <select id="exerciseSelect" class="exercise-select">
+            <option value="">問題データを読み込み中...</option>
+          </select>
+        </section>
+
+        <section id="creatorPanel" class="generator hidden" aria-label="問題生成">
           <label class="source-field" data-guide-target="source">
             <span>正しいC/C++プログラム</span>
             <textarea id="correctSource" spellcheck="false"></textarea>
@@ -45,6 +56,21 @@
               <input id="maxRules" type="number" min="1" max="12" value="4" />
             </label>
             <button id="generateButton" type="button" data-guide-target="generate">問題生成</button>
+          </div>
+
+          <div id="saveExerciseArea" class="save-exercise-area hidden">
+            <div class="save-form">
+              <label class="title-field">
+                <span>保存タイトル</span>
+                <input id="exerciseTitleInput" type="text" placeholder="例: 配列の平均値計算問題" />
+              </label>
+              <button id="saveExerciseBtn" type="button" class="accent">この問題をストックに保存</button>
+            </div>
+          </div>
+
+          <div class="saved-list-area">
+            <h3>保存済みの問題ストック一覧</h3>
+            <div id="savedExercisesList" class="saved-list">読み込み中...</div>
           </div>
         </section>
 
